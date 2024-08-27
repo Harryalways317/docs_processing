@@ -1,0 +1,1 @@
+pip install azure-ai-documentintelligence==1.0.0b3 azure-cognitiveservices-vision-computervision==0.9.0 azure-common==1.1.28 azure-core==1.30.2 azure-storage-blob==12.20.0
