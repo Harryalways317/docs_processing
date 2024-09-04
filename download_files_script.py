@@ -262,8 +262,8 @@ def download_and_rename(csv_file, output_folder):
         for index, row in df.iterrows():
             ticker = row['Symbol']
             print("ticker ",ticker)
-            ar_url = row['AR for FY 24']
-            print("ar_url ", ticker)
+            ar_url = row['ARs']
+            print("ar_url ", ar_url)
             output_filename = f"{ticker}.AR.pdf"
             output_path = os.path.join(output_folder, output_filename)
             if pd.isna(ar_url) or ar_url.strip().lower() == 'na':

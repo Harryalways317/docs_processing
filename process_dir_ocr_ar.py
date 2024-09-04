@@ -1,3 +1,4 @@
+import json
 import os, sys
 import re
 from datetime import datetime
@@ -22,7 +23,7 @@ key = "379e246e59b84d94ac1f4d8f8538bdc7"
 AZURE_ACCOUNT_NAME = "prodpublic24"
 AZURE_ACCOUNT_KEY = "9uBBrUvKWddmweMD7uNvZb2KjaqYL1xM7I8+2M3tsVBDZZtPlbmm3cVzqIH6ZsjWaZabjVF1NJtS+AStzgxShg=="
 # AZURE_CONTAINER_NAME = "brsr-fy24-2"
-AZURE_CONTAINER_NAME = "ar-fy24-4"
+AZURE_CONTAINER_NAME = "ar-fy23-1"
 # AZURE_CONTAINER_NAME = "ar-fy24-3"
 
 #account_name = "prodpublic24"
@@ -535,8 +536,8 @@ def process_large_pdf(input_file, output_prefix, chunk_size=150):
         file.write(final_output)
 
     # Step 4: Upload to Azure Blob Storage
-    # blob_url = upload_to_azure(final_output_file, os.path.basename(final_output_file))
-    # print(f"Final merged markdown uploaded to: {blob_url}")
+    blob_url = upload_to_azure(final_output_file, os.path.basename(final_output_file))
+    print(f"Final merged markdown uploaded to: {blob_url}")
     log_processing_status(input_file, "uploaded to azure")
 
     # chunk the final output to question gen
@@ -544,6 +545,11 @@ def process_large_pdf(input_file, output_prefix, chunk_size=150):
     print("Final ocr pagewise files",len(pages_final_output.keys()))
     for page_number,content in pages_final_output.items():
         print(f"Page {page_number}: {content}")
+
+    output_file_path = f"{output_prefix}.json"
+    # Storing the pages_final_output as JSON
+    with open(output_file_path, 'w') as json_file:
+        json.dump(pages_final_output, json_file, indent=4)
 
 
 
@@ -626,7 +632,7 @@ def process_pdf(file_name):
         return None
 
 if __name__ == "__main__":
-    folder_name = "TEST"
+    folder_name = "AR23"
     current_directory = os.path.join(os.getcwd(), folder_name)
 
     if not os.path.exists(current_directory):
