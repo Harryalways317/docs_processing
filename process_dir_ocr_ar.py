@@ -1,4 +1,5 @@
 import os, sys
+import re
 from datetime import datetime
 
 from dotenv import load_dotenv
@@ -21,7 +22,7 @@ key = "379e246e59b84d94ac1f4d8f8538bdc7"
 AZURE_ACCOUNT_NAME = "prodpublic24"
 AZURE_ACCOUNT_KEY = "9uBBrUvKWddmweMD7uNvZb2KjaqYL1xM7I8+2M3tsVBDZZtPlbmm3cVzqIH6ZsjWaZabjVF1NJtS+AStzgxShg=="
 # AZURE_CONTAINER_NAME = "brsr-fy24-2"
-AZURE_CONTAINER_NAME = "ar-fy24-3"
+AZURE_CONTAINER_NAME = "ar-fy24-4"
 # AZURE_CONTAINER_NAME = "ar-fy24-3"
 
 #account_name = "prodpublic24"
@@ -35,10 +36,27 @@ def log_processing_status(file_name, status):
         file_name (str): Name of the file being processed.
         status (str): Status of the file processing ('started' or 'completed').
     """
-    status_file = "status.txt"
-    with open(status_file, "a") as log_file:
+    status_file = "fy_22_23_status.txt"
+    with open(status_file, "a+") as log_file:
         log_file.write(f"{datetime.now()} - {file_name}: {status}\n")
 
+
+def split_ocr_pagewise(ocr_content):
+    # Attempt to split using PageFooter
+    pages = re.split(r'<!-- PageFooter="[^"]+" -->', ocr_content)
+
+    # Check if the last page is an empty string or matches the pattern for PageNumber
+    if len(pages[-1].strip()) == 0 or re.match(r'^\s*<!-- PageNumber="\d+" -->\s*$', pages[-1].strip()):
+        pages = pages[:-1]
+
+    # If the pages split by PageFooter are less than 10, split using PageHeader
+    if len(pages) < 10:
+        pages = re.split(r'<!-- PageHeader="[^"]+" -->', ocr_content)
+        if len(pages[-1].strip()) == 0 or re.match(r'^\s*<!-- PageNumber="\d+" -->\s*$', pages[-1].strip()):
+            pages = pages[:-1]
+
+    print("Total Pages", len(pages))
+    return {i + 1: page.strip() for i, page in enumerate(pages) if page.strip()}
 def split_pdf(input_file, output_prefix, chunk_size=150):
     """Splits a PDF file into smaller chunks.
 
@@ -517,11 +535,19 @@ def process_large_pdf(input_file, output_prefix, chunk_size=150):
         file.write(final_output)
 
     # Step 4: Upload to Azure Blob Storage
-    blob_url = upload_to_azure(final_output_file, os.path.basename(final_output_file))
-    print(f"Final merged markdown uploaded to: {blob_url}")
-    log_processing_status(input_file, "completed")
+    # blob_url = upload_to_azure(final_output_file, os.path.basename(final_output_file))
+    # print(f"Final merged markdown uploaded to: {blob_url}")
+    log_processing_status(input_file, "uploaded to azure")
 
-    return blob_url
+    # chunk the final output to question gen
+    pages_final_output = split_ocr_pagewise(final_output)
+    print("Final ocr pagewise files",len(pages_final_output.keys()))
+    for page_number,content in pages_final_output.items():
+        print(f"Page {page_number}: {content}")
+
+
+
+    return "blob_url"
 
 
 # if __name__ == "__main__":
@@ -583,52 +609,117 @@ files_to_process = [
     "BAYERCROP.pdf"
 ]
 
+
+
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+def process_pdf(file_name):
+    try:
+        input_file_path = os.path.join(current_directory, file_name)
+        output_prefix = os.path.splitext(file_name)[0]
+        final_blob_url = process_large_pdf(input_file_path, output_prefix)
+        print(f"Final merged markdown available at: {final_blob_url}")
+        return final_blob_url
+    except Exception as e:
+        print(f"Failed to process {file_name}: {e}")
+        return None
+
 if __name__ == "__main__":
-    # Get the current working directory
-    current_directory = os.getcwd()
-    # Specify the folder name you want to navigate to
-    folder_name = "AR"  # Replace with the actual folder name
+    folder_name = "TEST"
+    current_directory = os.path.join(os.getcwd(), folder_name)
 
-    # Construct the path to the folder
-    folder_path = os.path.join(current_directory, folder_name)
-
-    current_directory = folder_path
-
-    # Check if the folder exists
-    if os.path.exists(folder_path) and os.path.isdir(folder_path):
-        # Change the working directory to the specified folder
-        os.chdir(folder_path)
-        print(f"Changed directory to {folder_path}")
-    else:
-        print(f"Folder {folder_name} does not exist in the current directory.")
+    if not os.path.exists(current_directory):
+        print(f"Directory {folder_name} does not exist.")
         sys.exit(1)
 
-    # Check if a PDF file is provided as an argument
-    print(sys.argv)
-    if len(sys.argv) > 1:
-        input_file_path = sys.argv[1]
-        output_prefix = os.path.splitext(os.path.basename(input_file_path))[0]
+    os.chdir(current_directory)
+    pdf_files = sorted([f for f in os.listdir('.') if f.endswith('AR.pdf')])
 
-        # Check if the provided file is in the list to process
-        if os.path.basename(input_file_path) in files_to_process or True:
-            # Process the provided PDF file
-            final_blob_url = process_large_pdf(input_file_path, output_prefix)
-            print(f"Final merged markdown available at: {final_blob_url}")
-        else:
-            print(f"File {input_file_path} is not in the list of files to process.")
-    else:
-        # Process all PDF files in the current directory
-        pdf_files = [f for f in os.listdir(current_directory) if f.endswith('.pdf')]
+    last_processed_file = "CGPOWER.AR.pdf"
+    if last_processed_file in pdf_files:
+        last_index = pdf_files.index(last_processed_file)
+        pdf_files = pdf_files[last_index + 1:]
 
-        if not pdf_files:
-            print("No PDF files found in the current directory.")
-            sys.exit(1)
+    if not pdf_files:
+        print("No new PDF files to process.")
+        sys.exit(1)
 
-        for pdf_file in pdf_files:
-            if pdf_file in files_to_process or True:
-                input_file_path = os.path.join(current_directory, pdf_file)
-                output_prefix = os.path.splitext(pdf_file)[0]
-                final_blob_url = process_large_pdf(input_file_path, output_prefix)
-                print(f"Final merged markdown available at: {final_blob_url}")
-            else:
-                print(f"Skipping {pdf_file}, not in the list of files to process.")
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_file = {executor.submit(process_pdf, pdf): pdf for pdf in pdf_files}
+        for future in as_completed(future_to_file):
+            file = future_to_file[future]
+            try:
+                url = future.result()
+                if url:
+                    print(f"Processed {file} successfully, uploaded to {url}")
+                else:
+                    print(f"No URL returned for {file}")
+            except Exception as exc:
+                print(f'{file} generated an exception: {exc}')
+
+
+# if __name__ == "__main__":
+#     # Get the current working directory
+#     current_directory = os.getcwd()
+#     # Specify the folder name you want to navigate to
+#     folder_name = "AR"  # Replace with the actual folder name
+
+#     # Construct the path to the folder
+#     folder_path = os.path.join(current_directory, folder_name)
+
+#     current_directory = folder_path
+
+#     # Check if the folder exists
+#     if os.path.exists(folder_path) and os.path.isdir(folder_path):
+#         # Change the working directory to the specified folder
+#         os.chdir(folder_path)
+#         print(f"Changed directory to {folder_path}")
+#     else:
+#         print(f"Folder {folder_name} does not exist in the current directory.")
+#         sys.exit(1)
+
+#     # Check if a PDF file is provided as an argument
+#     print(sys.argv)
+#     if len(sys.argv) > 1:
+#         input_file_path = sys.argv[1]
+#         output_prefix = os.path.splitext(os.path.basename(input_file_path))[0]
+
+#         # Check if the provided file is in the list to process
+#         if os.path.basename(input_file_path) in files_to_process or True:
+#             # Process the provided PDF file
+#             final_blob_url = process_large_pdf(input_file_path, output_prefix)
+#             print(f"Final merged markdown available at: {final_blob_url}")
+#         else:
+#             print(f"File {input_file_path} is not in the list of files to process.")
+#     else:
+#         # Process all PDF files in the current directory
+#         # pdf_files = [f for f in os.listdir(current_directory) if f.endswith('.pdf')]
+#         pdf_files = sorted([f for f in os.listdir(current_directory) if f.endswith('AR.pdf')])
+
+#                 # Specify the last processed file name
+#         last_processed_file = "CGPOWER.AR.pdf"  # Replace with the actual last processed file name
+
+#         # Find the index of the last processed file in the sorted list
+#         if last_processed_file in pdf_files:
+#             last_index = pdf_files.index(last_processed_file)
+#             # Ignore all files before and including the last processed file
+#             pdf_files = pdf_files[last_index + 1:]
+#         else:
+#             # If the last processed file is not found, process all files
+#             print(f"{last_processed_file} not found in the directory. Processing all files.")
+
+
+
+#         if not pdf_files:
+#             print("No PDF files found in the current directory.")
+#             sys.exit(1)
+
+#         for pdf_file in pdf_files:
+#             if pdf_file in files_to_process or True:
+#                 input_file_path = os.path.join(current_directory, pdf_file)
+#                 output_prefix = os.path.splitext(pdf_file)[0]
+#                 final_blob_url = process_large_pdf(input_file_path, output_prefix)
+#                 print(f"Final merged markdown available at: {final_blob_url}")
+#             else:
+#                 print(f"Skipping {pdf_file}, not in the list of files to process.")
