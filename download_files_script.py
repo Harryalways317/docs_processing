@@ -251,6 +251,8 @@ def download_file(ticker, ar_url, output_path, status_file):
         status_file.write(f"Completed {ticker}\n")
     except requests.RequestException as e:
         status_file.write(f"Failed {ticker}: {e}\n")
+    except Exception as e:
+        print("Sorry")
 
 def download_and_rename(csv_file, output_folder):
     df = pd.read_csv(csv_file)
@@ -266,6 +268,11 @@ def download_and_rename(csv_file, output_folder):
             print("ar_url ", ar_url)
             output_filename = f"{ticker}.AR.pdf"
             output_path = os.path.join(output_folder, output_filename)
+            print(output_path)
+            
+            if os.path.exists(output_path):
+                status_file.write(f"Skipping {ticker}, file already exists.\n")
+                continue
             if pd.isna(ar_url) or ar_url.strip().lower() == 'na':
                 status_file.write(f"Skipping {ticker}, URL is NA.\n")
                 continue
@@ -279,5 +286,5 @@ def download_and_rename(csv_file, output_folder):
 
 # Usage
 csv_file_path = 'companies.csv'
-output_folder = 'downloaded_reports'
+output_folder = 'ARFY23'
 download_and_rename(csv_file_path, output_folder)

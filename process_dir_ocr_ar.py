@@ -23,7 +23,7 @@ key = "379e246e59b84d94ac1f4d8f8538bdc7"
 AZURE_ACCOUNT_NAME = "prodpublic24"
 AZURE_ACCOUNT_KEY = "9uBBrUvKWddmweMD7uNvZb2KjaqYL1xM7I8+2M3tsVBDZZtPlbmm3cVzqIH6ZsjWaZabjVF1NJtS+AStzgxShg=="
 # AZURE_CONTAINER_NAME = "brsr-fy24-2"
-AZURE_CONTAINER_NAME = "ar-fy23-1"
+AZURE_CONTAINER_NAME = "ar-fy23"
 # AZURE_CONTAINER_NAME = "ar-fy24-3"
 
 #account_name = "prodpublic24"
@@ -495,7 +495,7 @@ def upload_to_azure(file_path, file_name):
         blob_client = blob_service_client.get_blob_client(container=AZURE_CONTAINER_NAME, blob=file_name_ocr)
 
         with open(file_path, "rb") as data:
-            blob_client.upload_blob(data)
+            blob_client.upload_blob(data,overwrite=True)
 
         blob_url = f"https://{AZURE_ACCOUNT_NAME}.blob.core.windows.net/{AZURE_CONTAINER_NAME}/{file_name_ocr}"
         return blob_url
@@ -553,7 +553,7 @@ def process_large_pdf(input_file, output_prefix, chunk_size=150):
 
 
 
-    return "blob_url"
+    return blob_url
 
 
 # if __name__ == "__main__":
@@ -632,7 +632,7 @@ def process_pdf(file_name):
         return None
 
 if __name__ == "__main__":
-    folder_name = "AR23"
+    folder_name = "ARFY23"
     current_directory = os.path.join(os.getcwd(), folder_name)
 
     if not os.path.exists(current_directory):
@@ -642,10 +642,19 @@ if __name__ == "__main__":
     os.chdir(current_directory)
     pdf_files = sorted([f for f in os.listdir('.') if f.endswith('AR.pdf')])
 
-    last_processed_file = "CGPOWER.AR.pdf"
-    if last_processed_file in pdf_files:
-        last_index = pdf_files.index(last_processed_file)
-        pdf_files = pdf_files[last_index + 1:]
+    # Read the status file to get the list of uploaded files
+    uploaded_files = set()
+    with open("fy_22_23_status.txt", "r") as status_file:
+        for line in status_file:
+            if "uploaded to azure" in line:
+                uploaded_file = line.split(" - ")[1].split(":")[0].split("/")[-1]
+                uploaded_files.add(uploaded_file)
+
+    # Filter out the already uploaded files
+    pdf_files = [f for f in pdf_files if f not in uploaded_files]
+
+    print("PDF Files",pdf_files)
+    print("Length",len(pdf_files))
 
     if not pdf_files:
         print("No new PDF files to process.")
